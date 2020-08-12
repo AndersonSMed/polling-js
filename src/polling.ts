@@ -1,53 +1,46 @@
-export declare type Executor = (signal?: any) => Promise<any>;
+import { Pending } from './states';
 
-export declare type AbortCallback = () => void;
+export type Executor = (signal?: any) => Promise<any>
 
-export enum State {
-  PENDING = "pending",
-  RUNNING = "running",
-  CANCELED = "canceled",
-}
+export type CancelFunction = () => void
 
 export interface IAbortController {
   signal: any;
-  abort: AbortCallback;
+  abort(): void;
 }
 
 export class Polling {
-  private _executor: Executor;
-  private _interval: number;
-  private _state: State;
-  private _scheduleId: any;
-  private _abortController?: IAbortController;
+  private _executor: Executor
+  private _interval: number
+  private _abortController?: IAbortController
+  private _state = new Pending()
+  private _scheduleId: any = null;
 
-  constructor(
+  constructor (
     executor: Executor,
     interval: number,
-    abortController?: IAbortController,
+    abortController?: IAbortController
   ) {
     this._executor = executor;
     this._interval = interval;
     this._abortController = abortController;
-    this._state = State.PENDING;
-    this._scheduleId = null;
   }
 
-  get state(): State {
-    return this._state;
+  get state (): String {
+    return this._state.constructor.name.toLowerCase();
   }
 
-  run() {
-    if (this._state != State.PENDING) {
-      console.warn('Skipping execution because the Polling state is different from pending');
-      return this.cancel;
-    }
-    this._state = State.RUNNING;
-    this._run();
+  run = (): CancelFunction => {
+    this._state = this._state.run(this._run);
     return this.cancel;
-  }
+  };
 
-  cancel = () => {
-    this._state = State.CANCELED;
+  cancel: CancelFunction = () => {
+    this._state = this._state.cancel(this._cancel);
+  };
+
+  private _cancel = () => {
+    // eslint-disable-next-line no-unused-expressions
     this._abortController?.abort();
     clearTimeout(this._scheduleId);
   };
@@ -57,16 +50,14 @@ export class Polling {
   };
 
   private _schedule = () => {
-    if (this._state === State.RUNNING) {
-      this._scheduleId = setTimeout(this._run, this._interval);
-    }
+    this._scheduleId = setTimeout(this._run, this._interval);
   };
 }
 
-export function setPolling(
+export function setPolling (
   executor: Executor,
   interval: number,
-  abortController?: IAbortController,
-) {
+  abortController?: IAbortController
+): CancelFunction {
   return new Polling(executor, interval, abortController).run();
 }
